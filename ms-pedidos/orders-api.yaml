@@ -1,0 +1,149 @@
+openapi: 3.0.0
+info:
+  title: API de Pedidos
+  description: API REST para gestionar pedidos de la plataforma de delivery. Se conecta con PostgreSQL y consume el micro de Restaurantes para validar y snapshot de precios.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Servidor de desarrollo
+
+paths:
+  /:
+    get:
+      summary: Echo test para health check del balanceador
+      responses:
+        '200':
+          description: OK
+
+  /orders:
+    get:
+      summary: Obtener los ultimos 100 pedidos
+      responses:
+        '200':
+          description: Lista de pedidos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Order'
+    post:
+      summary: Crear un nuevo pedido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+                  example: "u001"
+                restaurant_id:
+                  type: string
+                  example: "r001"
+                address:
+                  type: string
+                  example: "Av. Javier Prado 123"
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      dish_id:
+                        type: string
+                      qty:
+                        type: integer
+      responses:
+        '200':
+          description: Pedido creado exitosamente
+
+  /orders/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Obtener un pedido con sus items
+      responses:
+        '200':
+          description: Pedido y items
+        '404':
+          description: Pedido no encontrado
+    put:
+      summary: Cambiar estado del pedido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [CREATED, PAID, ACCEPTED, PREPARING, READY, PICKED_UP, EN_ROUTE, DELIVERED, CANCELLED]
+      responses:
+        '200':
+          description: Estado actualizado
+    delete:
+      summary: Eliminar un pedido
+      responses:
+        '200':
+          description: Pedido eliminado
+
+  /orders/user/{userId}:
+    get:
+      summary: Historial de pedidos de un usuario
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de pedidos del usuario
+
+  /orders/restaurant/{restaurantId}:
+    get:
+      summary: Pedidos recibidos por un restaurante
+      parameters:
+        - in: path
+          name: restaurantId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de pedidos del restaurante
+
+components:
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: string
+        restaurant_id:
+          type: string
+        subtotal:
+          type: number
+        delivery_fee:
+          type: number
+        total:
+          type: number
+        address:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time

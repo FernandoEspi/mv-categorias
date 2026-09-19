@@ -1,0 +1,61 @@
+-- ==========================================================
+-- Script de creacion de base de datos para el micro de Pedidos
+-- Ejecutar en Adminer, apuntando a pg_orders_c
+-- Motor: PostgreSQL 16
+-- ==========================================================
+
+DROP DATABASE IF EXISTS bd_api_orders;
+CREATE DATABASE bd_api_orders;
+
+-- Conectarse a la nueva base:
+\c bd_api_orders;
+
+CREATE TABLE orders (
+    id SERIAL PRIMARY KEY,
+    user_id VARCHAR(50) NOT NULL,
+    restaurant_id VARCHAR(50) NOT NULL,
+    subtotal DECIMAL(10,2) NOT NULL,
+    delivery_fee DECIMAL(10,2) NOT NULL,
+    total DECIMAL(10,2) NOT NULL,
+    address VARCHAR(255) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'CREATED',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_orders_user ON orders(user_id);
+CREATE INDEX idx_orders_restaurant ON orders(restaurant_id);
+CREATE INDEX idx_orders_status ON orders(status);
+
+CREATE TABLE order_items (
+    id SERIAL PRIMARY KEY,
+    order_id INT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    dish_id VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    qty INT NOT NULL
+);
+
+CREATE INDEX idx_items_order ON order_items(order_id);
+
+-- Datos de ejemplo (3 registros manuales tipo profe)
+INSERT INTO orders (user_id, restaurant_id, subtotal, delivery_fee, total, address, status)
+VALUES ('u001', 'r001', 45.00, 5.00, 50.00, 'Av. Javier Prado 123, San Isidro', 'DELIVERED');
+
+INSERT INTO orders (user_id, restaurant_id, subtotal, delivery_fee, total, address, status)
+VALUES ('u002', 'r002', 28.50, 5.00, 33.50, 'Calle Los Alamos 456, Miraflores', 'EN_ROUTE');
+
+INSERT INTO orders (user_id, restaurant_id, subtotal, delivery_fee, total, address, status)
+VALUES ('u001', 'r003', 62.00, 5.00, 67.00, 'Jr. Union 789, Cercado', 'PREPARING');
+
+INSERT INTO order_items (order_id, dish_id, name, price, qty)
+VALUES (1, 'd001', 'Lomo Saltado', 25.00, 1),
+       (1, 'd002', 'Chicha Morada', 10.00, 2);
+
+INSERT INTO order_items (order_id, dish_id, name, price, qty)
+VALUES (2, 'd003', 'Ceviche', 28.50, 1);
+
+INSERT INTO order_items (order_id, dish_id, name, price, qty)
+VALUES (3, 'd004', 'Aji de Gallina', 22.00, 2),
+       (3, 'd005', 'Inca Kola 1L', 9.00, 2);
+
+commit;

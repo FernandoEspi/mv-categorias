@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: pg_orders_c
+    networks:
+      - red_bd
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: utec
+      POSTGRES_DB: bd_api_orders
+    ports:
+      - "8004:5432"
+    volumes:
+      - pg_orders_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  adminer:
+    image: adminer
+    container_name: adminer_c
+    networks:
+      - red_bd
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+networks:
+  red_bd:
+    external: true
+
+volumes:
+  pg_orders_data:
+    external: true

@@ -1,0 +1,8 @@
+services:
+  orders-service:
+    build: .
+    image: orders-service
+    container_name: orders-service_c
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
