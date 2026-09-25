@@ -4,7 +4,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from passlib.context import CryptContext
 import jwt
 import models, schemas, database
@@ -39,15 +39,18 @@ security = HTTPBearer()
 
 def ensure_role_column():
     with database.engine.begin() as connection:
-        connection.execute(
-            text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS role "
-                "VARCHAR(20) NOT NULL DEFAULT 'cliente'"
+        columns = {column["name"] for column in inspect(connection).get_columns("users")}
+        if "role" not in columns:
+            connection.execute(
+                text(
+                    "ALTER TABLE users ADD COLUMN role "
+                    "VARCHAR(20) NOT NULL DEFAULT 'cliente'"
+                )
             )
-        )
-        connection.execute(
-            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS restaurant_id VARCHAR(50)")
-        )
+        if "restaurant_id" not in columns:
+            connection.execute(
+                text("ALTER TABLE users ADD COLUMN restaurant_id VARCHAR(50)")
+            )
 
 
 ensure_role_column()

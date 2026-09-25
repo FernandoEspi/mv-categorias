@@ -7,6 +7,11 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     networks: [cloudeats]
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ppassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   postgres:
     image: postgres:16
@@ -18,12 +23,22 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/local/postgres-init.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
     networks: [cloudeats]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root -d bd_api_orders"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   mongo:
     image: mongo:7
     volumes:
       - mongo_data:/data/db
     networks: [cloudeats]
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok'"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   usuarios:
     build: ./ms-usuarios
@@ -31,7 +46,9 @@ services:
       DATABASE_URL: mysql+pymysql://root:password@mysql:3306/mydb
       SECRET_KEY: local-only-change-this-secret
     ports: ["8001:8000"]
-    depends_on: [mysql]
+    depends_on:
+      mysql:
+        condition: service_healthy
     networks: [cloudeats]
 
   catalogo:
@@ -40,7 +57,9 @@ services:
       MONGO_URI: mongodb://mongo:27017/cloudeats_catalogo
       PORT: "3002"
     ports: ["3002:3002"]
-    depends_on: [mongo]
+    depends_on:
+      mongo:
+        condition: service_healthy
     networks: [cloudeats]
 
   pedidos:
@@ -54,7 +73,11 @@ services:
       RESTAURANTS_URL: http://catalogo:3002
       SECRET_KEY: local-only-change-this-secret
     ports: ["8000:8000"]
-    depends_on: [postgres, catalogo]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      catalogo:
+        condition: service_started
     networks: [cloudeats]
 
   historial:
@@ -65,7 +88,13 @@ services:
       MS2_CATALOGO_URL: http://catalogo:3002
       MS3_PEDIDOS_URL: http://pedidos:8000
     ports: ["3004:3004"]
-    depends_on: [usuarios, catalogo, pedidos]
+    depends_on:
+      usuarios:
+        condition: service_started
+      catalogo:
+        condition: service_started
+      pedidos:
+        condition: service_started
     networks: [cloudeats]
 
   consultas:
