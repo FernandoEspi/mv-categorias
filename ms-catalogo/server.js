@@ -35,6 +35,13 @@ const swaggerDocument = {
         parameters: [{ name: 'dishId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'OK' }, '404': { description: 'No encontrado' } }
       }
+    },
+    '/api/restaurantes/favorito/{userId}': {
+      get: {
+        summary: 'Obtener el restaurante asociado a un usuario',
+        parameters: [{ name: 'userId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'OK' }, '404': { description: 'No encontrado' } }
+      }
     }
   }
 };

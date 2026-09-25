@@ -9,7 +9,7 @@ Guia para ejecutar los cinco microservicios del proyecto en AWS Academy usando i
 | Usuarios | `ms-usuarios` | `8000` | FastAPI, MySQL | MySQL |
 | Pedidos | `ms-pedidos` | `8000` | Express, PostgreSQL | PostgreSQL y Catalogo |
 | Catalogo | `ms-catalogo` | `3002` | Express, MongoDB | MongoDB |
-| Historial | `ms-historial` | `3004` | FastAPI, HTTPX | Usuarios, Catalogo y Pedidos |
+| Historial | `ms-historial` | `3004` | Go, net/http | Usuarios, Catalogo y Pedidos |
 | Consultas | `ms-consultas` | `3005` | FastAPI, boto3, Athena | Athena y S3 |
 
 `ms-usuarios` y `ms-pedidos` usan el mismo puerto interno (`8000`). Para no consumir demasiados recursos del laboratorio, la topologia recomendada es una EC2 de aplicaciones con los cinco contenedores y una EC2 de bases de datos. Se publica Usuarios en el puerto externo `8001` y Pedidos en `8000`; ambos conservan su puerto interno `8000`.
@@ -57,8 +57,7 @@ Base URL: `http://<HOST>:8000` (o el puerto externo configurado, por ejemplo `80
 | `POST` | `/login` | Autentica al usuario y devuelve un token JWT. |
 | `GET` | `/usuarios` | Lista los usuarios. |
 | `GET` | `/usuarios/{user_id}` | Obtiene un usuario por ID. |
-| `GET` | `/docs` | Swagger UI generado por FastAPI. |
-| `GET` | `/openapi.json` | Especificacion OpenAPI generada por FastAPI. |
+| `GET` | `/openapi.json` | Especificacion OpenAPI del servicio. |
 
 ### Pedidos (`ms-pedidos`)
 
@@ -97,8 +96,8 @@ Base URL: `http://<HOST>:3004`.
 |---|---|---|
 | `GET` | `/health` | Verifica que el servicio este activo. |
 | `GET` | `/api/dashboard?userId={userId}` | Agrega datos del usuario, restaurante favorito e historial de pedidos. |
-| `GET` | `/docs` | Swagger UI generado por FastAPI. |
-| `GET` | `/openapi.json` | Especificacion OpenAPI generada por FastAPI. |
+| `GET` | `/docs` | Interfaz Swagger UI. |
+| `GET` | `/openapi.json` | Especificacion OpenAPI del servicio. |
 
 ### Consultas (`ms-consultas`)
 

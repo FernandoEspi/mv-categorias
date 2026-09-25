@@ -91,6 +91,19 @@ app.get("/orders/user/:userId", async (req, res) => {
   }
 });
 
+// Alias compatible con el agregador de Historial
+app.get("/api/pedidos/usuario/:userId", async (req, res) => {
+  try {
+    const r = await pool.query(
+      "SELECT * FROM orders WHERE user_id = $1 ORDER BY id DESC",
+      [req.params.userId]
+    );
+    res.json({ orders: r.rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Pedidos de un restaurante
 app.get("/orders/restaurant/:restaurantId", async (req, res) => {
   try {

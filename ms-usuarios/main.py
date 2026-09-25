@@ -75,6 +75,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
 def get_usuarios(db: Session = Depends(database.get_db)):
     return db.query(models.User).all()
 
+@app.get("/api/usuarios/{user_id}", response_model=schemas.UserResponse, include_in_schema=False)
 @app.get("/usuarios/{user_id}", response_model=schemas.UserResponse)
 def get_usuario_by_id(user_id: int, db: Session = Depends(database.get_db)):
     usuario = db.query(models.User).filter(models.User.id == user_id).first()

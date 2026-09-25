@@ -1,7 +1,11 @@
-FROM python:3.10-slim
+FROM golang:1.22-alpine AS builder
+WORKDIR /src
+COPY go.mod ./
+COPY main.go ./
+RUN CGO_ENABLED=0 GOOS=linux go build -o history-service .
+
+FROM alpine:3.20
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
+COPY --from=builder /src/history-service .
 EXPOSE 3004
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3004"]
+CMD ["./history-service"]

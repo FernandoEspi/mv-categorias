@@ -31,6 +31,33 @@ router.get('/platos/:dishId', async (req, res) => {
   }
 });
 
+// Obtiene el restaurante asociado a una reseña del usuario
+router.get('/favorito/:userId', async (req, res) => {
+  try {
+    const restaurant = await Restaurant.findOne(
+      { 'reseñas.usuarioId': req.params.userId },
+      { nombre: 1, distrito: 1, reseñas: 1 }
+    );
+
+    if (!restaurant) {
+      return res.status(404).json({ message: 'Restaurante favorito no encontrado' });
+    }
+
+    const review = restaurant.reseñas.find(
+      (item) => item.usuarioId === req.params.userId
+    );
+
+    res.json({
+      id: restaurant._id,
+      nombre: restaurant.nombre,
+      distrito: restaurant.distrito,
+      calificacion: review?.calificacion
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/restaurantes - Crear un restaurante con sus platos y reseñas
 router.post('/', async (req, res) => {
   try {

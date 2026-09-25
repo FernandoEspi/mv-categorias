@@ -6,12 +6,11 @@ Este repositorio contiene el **Microservicio Agregador**, un orquestador encarga
 
 ## 🛠️ Tecnologías Utilizadas
 
-* **Lenguaje:** Python (v3.10+)
-* **Framework Web:** FastAPI
-* **Cliente HTTP Asíncrono:** HTTPX
-* **Servidor ASGI:** Uvicorn
+* **Lenguaje:** Go (v1.22+)
+* **Servidor HTTP:** `net/http` de la biblioteca estándar
+* **Cliente HTTP:** `net/http` con peticiones concurrentes
 * **Base de Datos:** *Sin Base de Datos* (Orquestador en memoria)
-* **Documentación:** Swagger UI (Auto-generada)
+* **Documentación:** OpenAPI JSON en `/openapi.json`
 * **Contenerización:** Docker
 
 ---
@@ -20,9 +19,7 @@ Este repositorio contiene el **Microservicio Agregador**, un orquestador encarga
 
 ```text
 agregador-service/
-├── app/
-│   ├── __init__.py      # Indicador de paquete Python
-│   └── main.py          # Lógica del orquestador y rutas FastAPI
-├── Dockerfile           # Configuración para contenerización
-├── requirements.txt     # Dependencias del proyecto
+├── main.go              # Logica del orquestador y rutas HTTP
+├── go.mod               # Módulo y versión de Go
+├── Dockerfile           # Imagen multi-stage de Go
 └── README.md
