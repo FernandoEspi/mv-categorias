@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const swaggerUi = require('swagger-ui-express');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(express.json());
@@ -31,6 +32,43 @@ const pool = new Pool({
 
 // URL del micro de Restaurantes (compañero)
 const RESTAURANTS_URL = process.env.RESTAURANTS_URL || "http://localhost:3002";
+const SECRET_KEY = process.env.SECRET_KEY || "tu_secreto_super_seguro";
+
+function requireRole(allowedRoles) {
+  return (req, res, next) => {
+    const authorization = req.headers.authorization || "";
+    const [scheme, token] = authorization.split(" ");
+    if (scheme !== "Bearer" || !token) {
+      return res.status(401).json({ error: "Bearer token required" });
+    }
+
+    try {
+      const payload = jwt.verify(token, SECRET_KEY);
+      if (!allowedRoles.includes(payload.role)) {
+        return res.status(403).json({ error: "Insufficient permissions" });
+      }
+      req.user = payload;
+      next();
+    } catch (error) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+  };
+}
+
+function requireAuthenticated(req, res, next) {
+  return requireRole(["cliente", "restaurante", "admin"])(req, res, next);
+}
+
+function canAccessOrder(user, order) {
+  if (user.role === "admin") {
+    return true;
+  }
+  if (user.role === "cliente") {
+    return String(user.user_id) === String(order.user_id);
+  }
+  return user.role === "restaurante"
+    && String(user.restaurant_id || "") === String(order.restaurant_id);
+}
 
 const swaggerDocument = yaml.load(
   fs.readFileSync(path.join(__dirname, 'orders-api.yaml'), 'utf8')
@@ -47,7 +85,7 @@ app.get("/", (req, res) => {
 });
 
 // Obtener todos los pedidos
-app.get("/orders", async (req, res) => {
+app.get("/orders", requireRole(["admin"]), async (req, res) => {
   try {
     const r = await pool.query(
       "SELECT * FROM orders ORDER BY id DESC LIMIT 100"
@@ -59,7 +97,7 @@ app.get("/orders", async (req, res) => {
 });
 
 // Obtener un pedido por id (con sus items)
-app.get("/orders/:id", async (req, res) => {
+app.get("/orders/:id", requireAuthenticated, async (req, res) => {
   try {
     const order = await pool.query(
       "SELECT * FROM orders WHERE id = $1",
@@ -67,6 +105,9 @@ app.get("/orders/:id", async (req, res) => {
     );
     if (order.rows.length === 0) {
       return res.status(404).json({ error: "Order not found" });
+    }
+    if (!canAccessOrder(req.user, order.rows[0])) {
+      return res.status(403).json({ error: "Insufficient permissions" });
     }
     const items = await pool.query(
       "SELECT * FROM order_items WHERE order_id = $1",
@@ -79,7 +120,10 @@ app.get("/orders/:id", async (req, res) => {
 });
 
 // Historial de pedidos de un usuario
-app.get("/orders/user/:userId", async (req, res) => {
+app.get("/orders/user/:userId", requireAuthenticated, async (req, res) => {
+  if (req.user.role !== "admin" && String(req.user.user_id) !== String(req.params.userId)) {
+    return res.status(403).json({ error: "Only your own order history is available" });
+  }
   try {
     const r = await pool.query(
       "SELECT * FROM orders WHERE user_id = $1 ORDER BY id DESC",
@@ -92,7 +136,10 @@ app.get("/orders/user/:userId", async (req, res) => {
 });
 
 // Alias compatible con el agregador de Historial
-app.get("/api/pedidos/usuario/:userId", async (req, res) => {
+app.get("/api/pedidos/usuario/:userId", requireAuthenticated, async (req, res) => {
+  if (req.user.role !== "admin" && String(req.user.user_id) !== String(req.params.userId)) {
+    return res.status(403).json({ error: "Only your own order history is available" });
+  }
   try {
     const r = await pool.query(
       "SELECT * FROM orders WHERE user_id = $1 ORDER BY id DESC",
@@ -105,7 +152,10 @@ app.get("/api/pedidos/usuario/:userId", async (req, res) => {
 });
 
 // Pedidos de un restaurante
-app.get("/orders/restaurant/:restaurantId", async (req, res) => {
+app.get("/orders/restaurant/:restaurantId", requireRole(["restaurante", "admin"]), async (req, res) => {
+  if (req.user.role === "restaurante" && String(req.user.restaurant_id) !== String(req.params.restaurantId)) {
+    return res.status(403).json({ error: "Restaurant access denied" });
+  }
   try {
     const r = await pool.query(
       "SELECT * FROM orders WHERE restaurant_id = $1 ORDER BY id DESC LIMIT 50",
@@ -118,44 +168,41 @@ app.get("/orders/restaurant/:restaurantId", async (req, res) => {
 });
 
 // Crear un pedido (consume el micro de Restaurantes)
-app.post("/orders", async (req, res) => {
+app.post("/orders", requireRole(["cliente", "admin"]), async (req, res) => {
   const client = await pool.connect();
+  let transactionStarted = false;
   try {
     const { user_id, restaurant_id, address, items } = req.body;
+    if (!user_id || !restaurant_id || !address || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: "user_id, restaurant_id, address and items are required" });
+    }
+    if (req.user.role === "cliente" && String(req.user.user_id) !== String(user_id)) {
+      return res.status(403).json({ error: "Cannot create an order for another user" });
+    }
 
     // Consumir micro de Restaurantes para validar y traer precios
     let subtotal = 0;
     const enriched = [];
     for (const it of items) {
-      try {
-        const r = await fetch(`${RESTAURANTS_URL}/api/restaurantes/platos/${it.dish_id}`);
-        if (!r.ok) {
-          throw new Error(`Restaurant service returned ${r.status}`);
-        }
-        const dish = await r.json();
-        subtotal += Number(dish.precio) * it.qty;
-        enriched.push({
-          dish_id: it.dish_id,
-          name: dish.nombre || "unknown",
-          price: dish.precio || 0,
-          qty: it.qty
-        });
-      } catch (err) {
-        // Si el micro de Restaurantes no responde, seguimos con datos mock
-        enriched.push({
-          dish_id: it.dish_id,
-          name: it.name || "unknown",
-          price: it.price || 10,
-          qty: it.qty
-        });
-        subtotal += (it.price || 10) * it.qty;
+      const r = await fetch(`${RESTAURANTS_URL}/api/restaurantes/platos/${it.dish_id}`);
+      if (!r.ok) {
+        return res.status(r.status === 404 ? 404 : 502).json({ error: "Dish service unavailable or dish not found" });
       }
+      const dish = await r.json();
+      const price = Number(dish.precio);
+      const quantity = Number(it.qty);
+      if (!dish.nombre || !Number.isFinite(price) || price < 0 || !Number.isInteger(quantity) || quantity < 1) {
+        return res.status(502).json({ error: "Invalid dish data from catalog" });
+      }
+      subtotal += price * quantity;
+      enriched.push({ dish_id: it.dish_id, name: dish.nombre, price, qty: quantity });
     }
 
     const delivery_fee = 5.0;
     const total = subtotal + delivery_fee;
 
     await client.query("BEGIN");
+    transactionStarted = true;
     const r = await client.query(
       `INSERT INTO orders (user_id, restaurant_id, subtotal, delivery_fee, total, address, status)
        VALUES ($1,$2,$3,$4,$5,$6,'CREATED') RETURNING id`,
@@ -174,7 +221,9 @@ app.post("/orders", async (req, res) => {
 
     res.json({ message: "Order created successfully", id: orderId, total });
   } catch (e) {
-    await client.query("ROLLBACK");
+    if (transactionStarted) {
+      await client.query("ROLLBACK");
+    }
     res.status(500).json({ error: e.message });
   } finally {
     client.release();
@@ -182,9 +231,20 @@ app.post("/orders", async (req, res) => {
 });
 
 // Cambiar estado de un pedido
-app.put("/orders/:id", async (req, res) => {
+app.put("/orders/:id", requireRole(["restaurante", "admin"]), async (req, res) => {
   try {
     const { status } = req.body;
+    const allowedStatuses = ["CREATED", "PAID", "ACCEPTED", "PREPARING", "READY", "PICKED_UP", "EN_ROUTE", "DELIVERED", "CANCELLED"];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ error: "Invalid order status" });
+    }
+    const current = await pool.query("SELECT * FROM orders WHERE id = $1", [req.params.id]);
+    if (current.rows.length === 0) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+    if (!canAccessOrder(req.user, current.rows[0])) {
+      return res.status(403).json({ error: "Restaurant access denied" });
+    }
     await pool.query(
       "UPDATE orders SET status = $1 WHERE id = $2",
       [status, req.params.id]
@@ -196,7 +256,7 @@ app.put("/orders/:id", async (req, res) => {
 });
 
 // Eliminar un pedido
-app.delete("/orders/:id", async (req, res) => {
+app.delete("/orders/:id", requireRole(["admin"]), async (req, res) => {
   try {
     await pool.query("DELETE FROM orders WHERE id = $1", [req.params.id]);
     res.json({ message: "Order deleted successfully" });

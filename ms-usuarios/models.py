@@ -11,6 +11,8 @@ class User(Base):
     email = Column(String(255), unique=True, index=True, nullable=False)
     telefono = Column(String(20), nullable=False)
     password = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="cliente")
+    restaurant_id = Column(String(50), nullable=True)
     
     # Relacion 1-a-N con Direccion
     direcciones = relationship("Direccion", back_populates="user", cascade="all, delete-orphan")

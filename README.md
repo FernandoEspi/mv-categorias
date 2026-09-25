@@ -72,10 +72,10 @@ Base URL: `http://<HOST>:8000`.
 | `GET` | `/orders` | Lista los ultimos 100 pedidos. |
 | `POST` | `/orders` | Crea un pedido. |
 | `GET` | `/orders/{id}` | Obtiene un pedido y sus items. |
-| `PUT` | `/orders/{id}` | Actualiza el estado de un pedido. |
-| `DELETE` | `/orders/{id}` | Elimina un pedido. |
+| `PUT` | `/orders/{id}` | Actualiza el estado; requiere rol `restaurante` o `admin`. |
+| `DELETE` | `/orders/{id}` | Elimina un pedido; requiere rol `admin`. |
 | `GET` | `/orders/user/{userId}` | Lista los pedidos de un usuario. |
-| `GET` | `/orders/restaurant/{restaurantId}` | Lista los pedidos de un restaurante. |
+| `GET` | `/orders/restaurant/{restaurantId}` | Lista pedidos; requiere rol `restaurante` o `admin`. |
 | `GET` | `/docs` | Swagger UI. |
 | `GET` | `/openapi.json` | Especificacion OpenAPI. |
 

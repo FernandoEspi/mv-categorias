@@ -19,6 +19,8 @@ paths:
   /orders:
     get:
       summary: Obtener los ultimos 100 pedidos
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Lista de pedidos
@@ -33,6 +35,8 @@ paths:
                       $ref: '#/components/schemas/Order'
     post:
       summary: Crear un nuevo pedido
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -71,6 +75,8 @@ paths:
           type: integer
     get:
       summary: Obtener un pedido con sus items
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Pedido y items
@@ -78,6 +84,8 @@ paths:
           description: Pedido no encontrado
     put:
       summary: Cambiar estado del pedido
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -93,6 +101,8 @@ paths:
           description: Estado actualizado
     delete:
       summary: Eliminar un pedido
+      security:
+        - bearerAuth: []
       responses:
         '200':
           description: Pedido eliminado
@@ -100,6 +110,8 @@ paths:
   /orders/user/{userId}:
     get:
       summary: Historial de pedidos de un usuario
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
           name: userId
@@ -113,6 +125,8 @@ paths:
   /orders/restaurant/{restaurantId}:
     get:
       summary: Pedidos recibidos por un restaurante
+      security:
+        - bearerAuth: []
       parameters:
         - in: path
           name: restaurantId
@@ -124,6 +138,11 @@ paths:
           description: Lista de pedidos del restaurante
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     Order:
       type: object

@@ -1,4 +1,8 @@
+from typing import Literal
+
 from pydantic import BaseModel, EmailStr
+
+Role = Literal["cliente", "restaurante", "admin"]
 
 class UserCreate(BaseModel):
     nombre: str
@@ -18,6 +22,8 @@ class UserResponse(BaseModel):
     apellido: str
     email: EmailStr
     telefono: str
+    role: Role
+    restaurant_id: str | None = None
 
     class Config:
         from_attributes = True

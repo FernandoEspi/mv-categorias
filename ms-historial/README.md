@@ -13,6 +13,8 @@ Este repositorio contiene el **Microservicio Agregador**, un orquestador encarga
 * **Documentación:** OpenAPI JSON en `/openapi.json`
 * **Contenerización:** Docker
 
+`/api/dashboard` requiere `Authorization: Bearer <token>`. Un usuario `cliente` solo puede consultar su propio `userId`; un usuario `admin` puede consultar cualquier usuario.
+
 ---
 
 ## 📋 Estructura del Proyecto

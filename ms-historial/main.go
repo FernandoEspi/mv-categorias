@@ -1,12 +1,17 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,6 +36,8 @@ var config = serviceConfig{
 
 var httpClient = &http.Client{Timeout: 4 * time.Second}
 
+var secretKey = envOrDefault("SECRET_KEY", "tu_secreto_super_seguro")
+
 func envOrDefault(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
 		return value
@@ -38,8 +45,14 @@ func envOrDefault(name, fallback string) string {
 	return fallback
 }
 
-func fetchJSON(url string, fallback any) any {
-	response, err := httpClient.Get(url)
+func fetchJSON(url string, authorization string, fallback any) any {
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("warning: request to %s failed: %v; using fallback", url, err)
+		return fallback
+	}
+	request.Header.Set("Authorization", authorization)
+	response, err := httpClient.Do(request)
 	if err != nil || response.StatusCode != http.StatusOK {
 		if response != nil {
 			response.Body.Close()
@@ -67,10 +80,65 @@ func healthHandler(writer http.ResponseWriter, request *http.Request) {
 	writeJSON(writer, http.StatusOK, map[string]string{"status": "UP"})
 }
 
+func validateToken(request *http.Request) (map[string]any, error) {
+	parts := strings.Split(request.Header.Get("Authorization"), " ")
+	if len(parts) != 2 || parts[0] != "Bearer" {
+		return nil, fmt.Errorf("bearer token required")
+	}
+	tokenParts := strings.Split(parts[1], ".")
+	if len(tokenParts) != 3 {
+		return nil, fmt.Errorf("invalid token")
+	}
+	unsignedToken := tokenParts[0] + "." + tokenParts[1]
+	mac := hmac.New(sha256.New, []byte(secretKey))
+	_, _ = mac.Write([]byte(unsignedToken))
+	expectedSignature := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(expectedSignature), []byte(tokenParts[2])) {
+		return nil, fmt.Errorf("invalid signature")
+	}
+	claimsJSON, err := base64.RawURLEncoding.DecodeString(tokenParts[1])
+	if err != nil {
+		return nil, fmt.Errorf("invalid claims")
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(claimsJSON, &claims); err != nil {
+		return nil, fmt.Errorf("invalid claims")
+	}
+	if expiration, ok := claims["exp"].(float64); ok && time.Now().Unix() >= int64(expiration) {
+		return nil, fmt.Errorf("expired token")
+	}
+	return claims, nil
+}
+
+func sameUserID(claimValue any, requestedID string) bool {
+	switch value := claimValue.(type) {
+	case float64:
+		return strconv.FormatInt(int64(value), 10) == requestedID
+	case string:
+		return value == requestedID
+	default:
+		return false
+	}
+}
+
 func dashboardHandler(writer http.ResponseWriter, request *http.Request) {
 	userID := request.URL.Query().Get("userId")
 	if userID == "" {
 		writeJSON(writer, http.StatusBadRequest, map[string]string{"detail": "userId is required"})
+		return
+	}
+	claims, err := validateToken(request)
+	if err != nil {
+		writeJSON(writer, http.StatusUnauthorized, map[string]string{"detail": err.Error()})
+		return
+	}
+	role, _ := claims["role"].(string)
+	if role != "admin" && role != "cliente" {
+		writeJSON(writer, http.StatusForbidden, map[string]string{"detail": "rol sin acceso al dashboard"})
+		return
+	}
+	if role != "admin" && !sameUserID(claims["user_id"], userID) {
+		writeJSON(writer, http.StatusForbidden, map[string]string{"detail": "solo puedes consultar tu propio historial"})
 		return
 	}
 
@@ -82,6 +150,7 @@ func dashboardHandler(writer http.ResponseWriter, request *http.Request) {
 		defer waitGroup.Done()
 		userData = fetchJSON(
 			fmt.Sprintf("%s/api/usuarios/%s", config.usersURL, userID),
+			requestAuthorization(request),
 			map[string]string{"id": userID, "nombre": "Usuario Demo", "email": "demo@cloudeats.com"},
 		)
 	}()
@@ -89,6 +158,7 @@ func dashboardHandler(writer http.ResponseWriter, request *http.Request) {
 		defer waitGroup.Done()
 		favoriteRestaurant = fetchJSON(
 			fmt.Sprintf("%s/api/restaurantes/favorito/%s", config.catalogURL, userID),
+			requestAuthorization(request),
 			map[string]string{"id": "rest-1", "nombre": "Bembos Test", "distrito": "Miraflores"},
 		)
 	}()
@@ -96,6 +166,7 @@ func dashboardHandler(writer http.ResponseWriter, request *http.Request) {
 		defer waitGroup.Done()
 		ordersHistory = fetchJSON(
 			fmt.Sprintf("%s/api/pedidos/usuario/%s", config.ordersURL, userID),
+			requestAuthorization(request),
 			map[string]any{"orders": []any{}},
 		)
 	}()
@@ -120,7 +191,13 @@ func openAPIHandler(writer http.ResponseWriter, request *http.Request) {
 			"/api/dashboard": map[string]any{"get": map[string]any{
 				"summary": "Agrega datos del dashboard de un usuario",
 				"parameters": []map[string]any{{"name": "userId", "in": "query", "required": true, "schema": map[string]string{"type": "string"}}},
+				"security": []map[string][]string{{"bearerAuth": {}}},
 			}},
+		},
+		"components": map[string]any{
+			"securitySchemes": map[string]any{
+				"bearerAuth": map[string]string{"type": "http", "scheme": "bearer"},
+			},
 		},
 	})
 }
@@ -155,4 +232,8 @@ func main() {
 	if err := http.ListenAndServe(":3004", mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func requestAuthorization(request *http.Request) string {
+	return request.Header.Get("Authorization")
 }

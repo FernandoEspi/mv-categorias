@@ -1,6 +1,10 @@
+import os
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from passlib.context import CryptContext
 import jwt
 import models, schemas, database
@@ -29,6 +33,24 @@ models.Base.metadata.create_all(bind=database.engine)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 SECRET_KEY = "tu_secreto_super_seguro"
 ALGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY", SECRET_KEY)
+security = HTTPBearer()
+
+
+def ensure_role_column():
+    with database.engine.begin() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS role "
+                "VARCHAR(20) NOT NULL DEFAULT 'cliente'"
+            )
+        )
+        connection.execute(
+            text("ALTER TABLE users ADD COLUMN IF NOT EXISTS restaurant_id VARCHAR(50)")
+        )
+
+
+ensure_role_column()
 
 def get_password_hash(password):
     return pwd_context.hash(password)
@@ -72,11 +94,41 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
     if not db_user or not verify_password(user.password, db_user.password):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     
-    token = jwt.encode({"sub": db_user.email}, SECRET_KEY, algorithm=ALGORITHM)
+    token = jwt.encode(
+        {
+            "sub": db_user.email,
+            "user_id": db_user.id,
+            "role": db_user.role,
+            "restaurant_id": db_user.restaurant_id,
+        },
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
     return {"access_token": token, "token_type": "bearer"}
 
+
+def require_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+        )
+    except jwt.PyJWTError as error:
+        raise HTTPException(status_code=401, detail="Token invalido") from error
+
+    if payload.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Permisos insuficientes")
+    return payload
+
+
 @app.get("/usuarios", response_model=List[schemas.UserResponse])
-def get_usuarios(db: Session = Depends(database.get_db)):
+def get_usuarios(
+    db: Session = Depends(database.get_db),
+    _admin=Depends(require_admin),
+):
     return db.query(models.User).all()
 
 @app.get("/api/usuarios/{user_id}", response_model=schemas.UserResponse, include_in_schema=False)

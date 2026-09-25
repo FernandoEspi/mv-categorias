@@ -296,6 +296,37 @@ docker exec ms-usuarios python scripts/seed.py
 
 La contrasena de prueba para los usuarios generados es `Password123!`.
 
+## Roles
+
+Los usuarios nuevos se registran siempre con el rol `cliente`. El endpoint `GET /usuarios` requiere un JWT cuyo rol sea `admin`. El rol `restaurante` permite administrar pedidos desde `ms-pedidos`.
+
+En despliegue, configura `SECRET_KEY` como una variable de entorno fuerte y diferente por ambiente.
+
+Para convertir un usuario existente en administrador, registralo primero y ejecuta:
+
+```bash
+docker exec -e ADMIN_EMAIL='admin@example.com' \
+  -e ADMIN_PASSWORD='cambia-esta-clave' \
+  ms-usuarios python scripts/create_admin.py
+```
+
+El login devuelve el rol dentro del JWT. Envia el token para consultar el endpoint protegido:
+
+```text
+Authorization: Bearer <access_token>
+```
+
+Para asignar un rol a un usuario existente:
+
+```bash
+docker exec \
+  -e USER_EMAIL='restaurante@example.com' \
+  -e USER_ROLE='restaurante' \
+  -e RESTAURANT_ID='rest-001' \
+  proy-cloud-usuarios-1 \
+  python scripts/set_role.py
+```
+
 ## Ver contenedores activos
 
 ```bash

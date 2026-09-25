@@ -29,6 +29,7 @@ services:
     build: ./ms-usuarios
     environment:
       DATABASE_URL: mysql+pymysql://root:password@mysql:3306/mydb
+      SECRET_KEY: local-only-change-this-secret
     ports: ["8001:8000"]
     depends_on: [mysql]
     networks: [cloudeats]
@@ -51,6 +52,7 @@ services:
       DB_PASSWORD: utec
       DB_NAME: bd_api_orders
       RESTAURANTS_URL: http://catalogo:3002
+      SECRET_KEY: local-only-change-this-secret
     ports: ["8000:8000"]
     depends_on: [postgres, catalogo]
     networks: [cloudeats]
@@ -58,6 +60,7 @@ services:
   historial:
     build: ./ms-historial
     environment:
+      SECRET_KEY: local-only-change-this-secret
       MS1_USUARIOS_URL: http://usuarios:8000
       MS2_CATALOGO_URL: http://catalogo:3002
       MS3_PEDIDOS_URL: http://pedidos:8000
