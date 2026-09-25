@@ -286,6 +286,16 @@ Desde Swagger puedes:
 
 # 🔍 Comandos útiles
 
+## Seed masivo de datos
+
+El seed inserta 20.000 usuarios y una direccion relacionada por usuario. Es idempotente: si ya existe esa cantidad, no vuelve a insertar registros.
+
+```bash
+docker exec ms-usuarios python scripts/seed.py
+```
+
+La contrasena de prueba para los usuarios generados es `Password123!`.
+
 ## Ver contenedores activos
 
 ```bash

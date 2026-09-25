@@ -8,11 +8,13 @@ Guia para ejecutar los cinco microservicios del proyecto en AWS Academy usando i
 |---|---|---:|---|---|
 | Usuarios | `ms-usuarios` | `8000` | FastAPI, MySQL | MySQL |
 | Pedidos | `ms-pedidos` | `8000` | Express, PostgreSQL | PostgreSQL y Catalogo |
-| Catalogo | `ms-catalogo` | `3002` | Express, MongoDB | MongoDB |
+| Catalogo | `ms-catalogo` | `3002` | Go, MongoDB | MongoDB |
 | Historial | `ms-historial` | `3004` | Go, net/http | Usuarios, Catalogo y Pedidos |
 | Consultas | `ms-consultas` | `3005` | FastAPI, boto3, Athena | Athena y S3 |
 
 `ms-usuarios` y `ms-pedidos` usan el mismo puerto interno (`8000`). Para no consumir demasiados recursos del laboratorio, la topologia recomendada es una EC2 de aplicaciones con los cinco contenedores y una EC2 de bases de datos. Se publica Usuarios en el puerto externo `8001` y Pedidos en `8000`; ambos conservan su puerto interno `8000`.
+
+Para probar la integracion completa en local existe [docker-compose.local.yml](docker-compose.local.yml). Levanta las tres bases de datos y los cinco microservicios en una red privada de Docker.
 
 ## 1. Requisitos de AWS Academy
 
@@ -57,6 +59,7 @@ Base URL: `http://<HOST>:8000` (o el puerto externo configurado, por ejemplo `80
 | `POST` | `/login` | Autentica al usuario y devuelve un token JWT. |
 | `GET` | `/usuarios` | Lista los usuarios. |
 | `GET` | `/usuarios/{user_id}` | Obtiene un usuario por ID. |
+| `GET` | `/docs` | Swagger UI generado por FastAPI. |
 | `GET` | `/openapi.json` | Especificacion OpenAPI del servicio. |
 
 ### Pedidos (`ms-pedidos`)
@@ -86,6 +89,7 @@ Base URL: `http://<HOST>:3002`.
 | `GET` | `/api/restaurantes` | Lista los restaurantes. |
 | `POST` | `/api/restaurantes` | Crea un restaurante con sus platos y resenas. |
 | `GET` | `/api/restaurantes/platos/{dishId}` | Obtiene los datos de un plato por ID. |
+| `GET` | `/api/restaurantes/favorito/{userId}` | Obtiene el restaurante asociado a un usuario. |
 | `GET` | `/docs` | Swagger UI. |
 
 ### Historial (`ms-historial`)
@@ -111,14 +115,147 @@ Base URL: `http://<HOST>:3005`.
 | `GET` | `/docs` | Swagger UI generado por FastAPI. |
 | `GET` | `/openapi.json` | Especificacion OpenAPI generada por FastAPI. |
 
-### Rutas pendientes de alinear
+Las rutas que consume `ms-historial` ya estan implementadas como aliases compatibles en Usuarios, Catalogo y Pedidos.
 
-`ms-historial` intenta consumir estas rutas, pero no existen en las implementaciones actuales:
+## Prueba local de integración
 
-- `GET /api/restaurantes/favorito/{user_id}` en `ms-catalogo`.
-- `GET /api/pedidos/usuario/{user_id}` en `ms-pedidos`.
+Requisitos: Docker Desktop iniciado y Docker Compose disponible.
 
-Mientras no se agreguen o se cambien esas rutas en `ms-historial`, el dashboard devolvera los datos de respaldo configurados en el servicio cuando esas peticiones fallen.
+```bash
+docker compose -f docker-compose.local.yml up -d --build
+docker compose -f docker-compose.local.yml ps
+```
+
+Ejecuta los seeds una sola vez:
+
+```bash
+docker compose -f docker-compose.local.yml run --rm usuarios python scripts/seed.py
+docker compose -f docker-compose.local.yml run --rm catalogo ./catalog-seed
+docker compose -f docker-compose.local.yml run --rm pedidos node seed.js
+```
+
+Prueba salud, Swagger y el agregador:
+
+```bash
+  curl http://localhost:8001/health
+curl http://localhost:3002/health
+  curl http://localhost:8000/
+curl http://localhost:3004/health
+curl http://localhost:3005/health
+  curl http://localhost:8001/docs
+curl http://localhost:3002/docs
+  curl http://localhost:8000/docs
+curl http://localhost:3004/docs
+curl http://localhost:3005/docs
+curl "http://localhost:3004/api/dashboard?userId=1"
+```
+
+Para detener la prueba conservando los datos:
+
+```bash
+docker compose -f docker-compose.local.yml down
+```
+
+Para borrar tambien las bases locales:
+
+```bash
+docker compose -f docker-compose.local.yml down -v
+```
+
+## Modelo de datos
+
+### MySQL: Usuarios
+
+```mermaid
+erDiagram
+    USERS ||--o{ DIRECCIONES : tiene
+    USERS {
+        int id PK
+        varchar nombre
+        varchar apellido
+        varchar email UK
+        varchar telefono
+        varchar password
+    }
+    DIRECCIONES {
+        int id PK
+        varchar calle_y_numero
+        int user_id FK
+    }
+```
+
+### PostgreSQL: Pedidos
+
+```mermaid
+erDiagram
+    ORDERS ||--o{ ORDER_ITEMS : contiene
+    ORDERS {
+        int id PK
+        varchar user_id
+        varchar restaurant_id
+        decimal subtotal
+        decimal delivery_fee
+        decimal total
+        varchar address
+        varchar status
+        timestamp created_at
+    }
+    ORDER_ITEMS {
+        int id PK
+        int order_id FK
+        varchar dish_id
+        varchar name
+        decimal price
+        int qty
+    }
+```
+
+### MongoDB: Catalogo
+
+La coleccion `restaurants` tiene esta estructura JSON:
+
+```json
+{
+  "_id": "ObjectId",
+  "nombre": "Restaurante Seed 00001",
+  "distrito": "Miraflores",
+  "platos": [
+    {
+      "_id": "ObjectId",
+      "nombre": "Ceviche",
+      "precio": 35,
+      "descripcion": "Plato de prueba"
+    }
+  ],
+  "reseñas": [
+    {
+      "usuarioId": "seed-user-00001",
+      "comentario": "Resena de prueba",
+      "calificacion": 5
+    }
+  ]
+}
+```
+
+## Arquitectura AWS objetivo
+
+```mermaid
+flowchart LR
+    Client[Cliente HTTPS] --> APIGW[AWS API Gateway]
+    APIGW --> VPCLINK[VPC Link]
+    VPCLINK --> ALB[Internal Application Load Balancer]
+    ALB --> VM1[EC2 Produccion 1<br/>Docker Compose]
+    ALB --> VM2[EC2 Produccion 2<br/>Docker Compose]
+    VM1 --> DB[EC2 privada de bases de datos]
+    VM2 --> DB
+    DB --> MYSQL[(MySQL)]
+    DB --> POSTGRES[(PostgreSQL)]
+    DB --> MONGO[(MongoDB)]
+    VM1 --> ATHENA[AWS Athena + S3]
+    VM2 --> ATHENA
+```
+
+El balanceador debe ser interno, las bases de datos deben aceptar trafico solo desde el Security Group de las VMs de produccion y API Gateway debe ser el unico punto publico HTTPS.
 
 ## 2. Preparar las instancias EC2
 
@@ -270,7 +407,7 @@ docker run -d --name ms-pedidos --restart unless-stopped \
   -e DB_USER='root' \
   -e DB_PASSWORD='utec' \
   -e DB_NAME='bd_api_orders' \
-  -e RESTAURANTS_URL='http://<IP_PRIVADA_CATALOGO>:3002/api/restaurantes' \
+  -e RESTAURANTS_URL='http://<IP_PRIVADA_CATALOGO>:3002' \
   ms-pedidos
 ```
 

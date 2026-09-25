@@ -6,13 +6,13 @@ Este repositorio contiene el **Microservicio de Catálogo**, encargado de la ges
 
 ## 🛠️ Tecnologías Utilizadas
 
-* **Lenguaje / Entorno:** Node.js (v18+)
-* **Framework Web:** Express.js
+* **Lenguaje:** Go (v1.22+)
+* **Servidor HTTP:** `net/http`
 * **Base de Datos:** MongoDB (NoSQL)
-* **ORM / ODM:** Mongoose
-* **Documentación:** Swagger UI (`swagger-ui-express`)
+* **Driver:** MongoDB Go Driver
+* **Documentación:** Swagger UI en `/docs` y OpenAPI en `/openapi.json`
 * **Contenerización:** Docker
-* **Inyección de Datos:** Faker.js (`@faker-js/faker`)
+* **Inyección de Datos:** generador incluido en `cmd/seed`
 
 ---
 
@@ -20,16 +20,8 @@ Este repositorio contiene el **Microservicio de Catálogo**, encargado de la ges
 
 ```text
 catalogo-service/
-├── src/
-│   ├── config/
-│   │   └── db.js            # Conexión a MongoDB
-│   ├── models/
-│   │   └── Restaurant.js    # Esquema Mongoose con subdocumentos (platos/reseñas)
-│   ├── routes/
-│   │   └── restaurantRoutes.js # Endpoints REST de la API
-│   └── scripts/
-│       └── seed.js          # Script de inyección masiva de datos (+20,000 registros)
-├── Dockerfile               # Configuración para contenerización
-├── package.json             # Dependencias del proyecto
-├── server.js                # Punto de entrada de la aplicación
+├── cmd/seed/main.go         # Seed de 20.000 documentos MongoDB
+├── go.mod                   # Modulo Go y driver de MongoDB
+├── main.go                  # API REST y conexiones a MongoDB
+├── Dockerfile               # Imagen multi-stage de Go
 └── README.md

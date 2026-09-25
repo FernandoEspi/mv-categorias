@@ -7,3 +7,4 @@ passlib[bcrypt]
 bcrypt==4.0.1
 PyJWT
 pydantic[email]
+Faker==24.14.1

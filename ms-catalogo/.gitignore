@@ -1,2 +1,6 @@
-node_modules/
 .env
+
+bin/
+*.exe
+catalog-service
+catalog-seed

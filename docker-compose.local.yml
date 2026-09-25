@@ -1,0 +1,83 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: mydb
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks: [cloudeats]
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: utec
+      POSTGRES_DB: bd_api_orders
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/local/postgres-init.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    networks: [cloudeats]
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo_data:/data/db
+    networks: [cloudeats]
+
+  usuarios:
+    build: ./ms-usuarios
+    environment:
+      DATABASE_URL: mysql+pymysql://root:password@mysql:3306/mydb
+    ports: ["8001:8000"]
+    depends_on: [mysql]
+    networks: [cloudeats]
+
+  catalogo:
+    build: ./ms-catalogo
+    environment:
+      MONGO_URI: mongodb://mongo:27017/cloudeats_catalogo
+      PORT: "3002"
+    ports: ["3002:3002"]
+    depends_on: [mongo]
+    networks: [cloudeats]
+
+  pedidos:
+    build: ./ms-pedidos
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: root
+      DB_PASSWORD: utec
+      DB_NAME: bd_api_orders
+      RESTAURANTS_URL: http://catalogo:3002
+    ports: ["8000:8000"]
+    depends_on: [postgres, catalogo]
+    networks: [cloudeats]
+
+  historial:
+    build: ./ms-historial
+    environment:
+      MS1_USUARIOS_URL: http://usuarios:8000
+      MS2_CATALOGO_URL: http://catalogo:3002
+      MS3_PEDIDOS_URL: http://pedidos:8000
+    ports: ["3004:3004"]
+    depends_on: [usuarios, catalogo, pedidos]
+    networks: [cloudeats]
+
+  consultas:
+    build: ./ms-consultas
+    environment:
+      AWS_REGION: us-east-1
+      ATHENA_S3_OUTPUT: s3://local-placeholder/
+      ATHENA_DATABASE: cloudeats_db
+    ports: ["3005:3005"]
+    networks: [cloudeats]
+
+networks:
+  cloudeats:
+
+volumes:
+  mysql_data:
+  postgres_data:
+  mongo_data:

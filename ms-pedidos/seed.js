@@ -10,10 +10,10 @@ const { faker } = require('@faker-js/faker');
 // Ajustar con la IP privada de la MV Bases de Datos
 const pool = new Pool({
   host: process.env.DB_HOST || "REEMPLAZAR_IP_PRIVADA_MV_BD",
-  port: 8004,
-  user: "root",
-  password: "utec",
-  database: "bd_api_orders",
+  port: process.env.DB_PORT || 5432,
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "utec",
+  database: process.env.DB_NAME || "bd_api_orders",
   max: 5
 });
 

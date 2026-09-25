@@ -20,6 +20,10 @@ app.add_middleware(
 def root():
     return {"message": "MS1 Usuarios OK"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "UP"}
+
 models.Base.metadata.create_all(bind=database.engine)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
