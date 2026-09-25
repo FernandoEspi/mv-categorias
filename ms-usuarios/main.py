@@ -107,7 +107,12 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
         SECRET_KEY,
         algorithm=ALGORITHM,
     )
-    return {"access_token": token, "token_type": "bearer"}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": db_user.id,
+        "role": db_user.role,
+    }
 
 
 def require_admin(
