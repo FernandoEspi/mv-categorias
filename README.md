@@ -42,6 +42,85 @@ Necesitas:
 
 No expongas bases de datos a `0.0.0.0/0`. En AWS, usa las reglas del Security Group para permitir el trafico entre instancias.
 
+## Endpoints de los microservicios
+
+La siguiente lista corresponde a las rutas implementadas actualmente en el codigo. Reemplaza `<HOST>` por `localhost`, la IP publica o la IP privada segun el origen de la peticion.
+
+### Usuarios (`ms-usuarios`)
+
+Base URL: `http://<HOST>:8000` (o el puerto externo configurado, por ejemplo `8001`).
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| `GET` | `/` | Verifica que el servicio este activo. |
+| `POST` | `/register` | Registra un usuario y su direccion. |
+| `POST` | `/login` | Autentica al usuario y devuelve un token JWT. |
+| `GET` | `/usuarios` | Lista los usuarios. |
+| `GET` | `/usuarios/{user_id}` | Obtiene un usuario por ID. |
+| `GET` | `/docs` | Swagger UI generado por FastAPI. |
+| `GET` | `/openapi.json` | Especificacion OpenAPI generada por FastAPI. |
+
+### Pedidos (`ms-pedidos`)
+
+Base URL: `http://<HOST>:8000`.
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| `GET` | `/` | Verifica que el servicio este activo. |
+| `GET` | `/orders` | Lista los ultimos 100 pedidos. |
+| `POST` | `/orders` | Crea un pedido. |
+| `GET` | `/orders/{id}` | Obtiene un pedido y sus items. |
+| `PUT` | `/orders/{id}` | Actualiza el estado de un pedido. |
+| `DELETE` | `/orders/{id}` | Elimina un pedido. |
+| `GET` | `/orders/user/{userId}` | Lista los pedidos de un usuario. |
+| `GET` | `/orders/restaurant/{restaurantId}` | Lista los pedidos de un restaurante. |
+| `GET` | `/docs` | Swagger UI. |
+| `GET` | `/openapi.json` | Especificacion OpenAPI. |
+
+### Catalogo (`ms-catalogo`)
+
+Base URL: `http://<HOST>:3002`.
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| `GET` | `/health` | Verifica que el servicio este activo. |
+| `GET` | `/api/restaurantes` | Lista los restaurantes. |
+| `POST` | `/api/restaurantes` | Crea un restaurante con sus platos y resenas. |
+| `GET` | `/api/restaurantes/platos/{dishId}` | Obtiene los datos de un plato por ID. |
+| `GET` | `/docs` | Swagger UI. |
+
+### Historial (`ms-historial`)
+
+Base URL: `http://<HOST>:3004`.
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| `GET` | `/health` | Verifica que el servicio este activo. |
+| `GET` | `/api/dashboard?userId={userId}` | Agrega datos del usuario, restaurante favorito e historial de pedidos. |
+| `GET` | `/docs` | Swagger UI generado por FastAPI. |
+| `GET` | `/openapi.json` | Especificacion OpenAPI generada por FastAPI. |
+
+### Consultas (`ms-consultas`)
+
+Base URL: `http://<HOST>:3005`.
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| `GET` | `/health` | Verifica que el servicio este activo. |
+| `GET` | `/api/analitica/platos-populares?limit={limit}` | Reporte de platos populares, con `limit` entre 1 y 50. |
+| `GET` | `/api/analitica/ventas-mensuales` | Reporte consolidado de ventas por mes. |
+| `GET` | `/docs` | Swagger UI generado por FastAPI. |
+| `GET` | `/openapi.json` | Especificacion OpenAPI generada por FastAPI. |
+
+### Rutas pendientes de alinear
+
+`ms-historial` intenta consumir estas rutas, pero no existen en las implementaciones actuales:
+
+- `GET /api/restaurantes/favorito/{user_id}` en `ms-catalogo`.
+- `GET /api/pedidos/usuario/{user_id}` en `ms-pedidos`.
+
+Mientras no se agreguen o se cambien esas rutas en `ms-historial`, el dashboard devolvera los datos de respaldo configurados en el servicio cuando esas peticiones fallen.
+
 ## 2. Preparar las instancias EC2
 
 Conectate por SSH a cada instancia y ejecuta:
@@ -122,13 +201,12 @@ El servicio usa `MONGO_URI` y escucha en el puerto `3002`.
 
 El proyecto actual no incluye un `docker-compose.yml` raiz que levante los cinco servicios. Despliegalos individualmente con los comandos de la siguiente seccion.
 
-Tambien hay contratos que deben corregirse o alinearse antes de una integracion completa:
+Tambien hay contratos que deben revisarse antes de una integracion completa:
 
-1. `ms-pedidos` llama a `${RESTAURANTS_URL}/dishes/:id`, pero `ms-catalogo` expone `/api/restaurantes/platos/:dishId`.
-2. `ms-pedidos` espera `dish.name` y `dish.price`, pero el catalogo devuelve `nombre` y `precio`.
-3. `ms-historial` usa rutas `/api/usuarios/...` y `/api/pedidos/...`; revisa que esas rutas existan en las versiones actuales de Usuarios y Pedidos.
-4. El endpoint de Usuarios actual usa `/usuarios/:id`, mientras Historial tiene por defecto `/api/usuarios/:id`.
-5. `ms-consultas` devuelve datos de respaldo si Athena falla. Verifica que el bucket S3, la base de Athena, las tablas y los permisos IAM existan antes de considerar el servicio operativo.
+1. `ms-pedidos` ya usa `/api/restaurantes/platos/:dishId` y los campos `nombre` y `precio` de `ms-catalogo`.
+2. `ms-historial` usa rutas `/api/usuarios/...` y `/api/pedidos/...`; revisa que esas rutas existan en las versiones actuales de Usuarios y Pedidos.
+3. El endpoint de Usuarios actual usa `/usuarios/:id`, mientras Historial tiene por defecto `/api/usuarios/:id`.
+4. `ms-consultas` devuelve datos de respaldo si Athena falla. Verifica que el bucket S3, la base de Athena, las tablas y los permisos IAM existan antes de considerar el servicio operativo.
 
 No uses datos mock como mecanismo de produccion. Son utiles para desarrollo, pero pueden ocultar fallos de conectividad o contratos entre microservicios.
 

@@ -1,6 +1,10 @@
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
+const yaml = require('js-yaml');
+const swaggerUi = require('swagger-ui-express');
 
 const app = express();
 app.use(express.json());
@@ -26,7 +30,14 @@ const pool = new Pool({
 });
 
 // URL del micro de Restaurantes (compañero)
-const RESTAURANTS_URL = process.env.RESTAURANTS_URL || "http://REEMPLAZAR_IP_MICRO_RESTAURANTES:8000";
+const RESTAURANTS_URL = process.env.RESTAURANTS_URL || "http://localhost:3002";
+
+const swaggerDocument = yaml.load(
+  fs.readFileSync(path.join(__dirname, 'orders-api.yaml'), 'utf8')
+);
+
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+app.get('/openapi.json', (req, res) => res.json(swaggerDocument));
 
 // ===== Endpoints =====
 
@@ -104,13 +115,16 @@ app.post("/orders", async (req, res) => {
     const enriched = [];
     for (const it of items) {
       try {
-        const r = await fetch(`${RESTAURANTS_URL}/dishes/${it.dish_id}`);
+        const r = await fetch(`${RESTAURANTS_URL}/api/restaurantes/platos/${it.dish_id}`);
+        if (!r.ok) {
+          throw new Error(`Restaurant service returned ${r.status}`);
+        }
         const dish = await r.json();
-        subtotal += Number(dish.price) * it.qty;
+        subtotal += Number(dish.precio) * it.qty;
         enriched.push({
           dish_id: it.dish_id,
-          name: dish.name || "unknown",
-          price: dish.price || 0,
+          name: dish.nombre || "unknown",
+          price: dish.precio || 0,
           qty: it.qty
         });
       } catch (err) {
