@@ -57,7 +57,7 @@ Base URL: `http://<HOST>:8000` (o el puerto externo configurado, por ejemplo `80
 | `GET` | `/` | Verifica que el servicio este activo. |
 | `POST` | `/register` | Registra un usuario y su direccion. |
 | `POST` | `/login` | Autentica al usuario y devuelve un token JWT. |
-| `GET` | `/usuarios` | Lista los usuarios. |
+| `GET` | `/usuarios` | Lista los usuarios; requiere rol `admin`. |
 | `GET` | `/usuarios/{user_id}` | Obtiene un usuario por ID. |
 | `GET` | `/docs` | Swagger UI generado por FastAPI. |
 | `GET` | `/openapi.json` | Especificacion OpenAPI del servicio. |
@@ -69,12 +69,12 @@ Base URL: `http://<HOST>:8000`.
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
 | `GET` | `/` | Verifica que el servicio este activo. |
-| `GET` | `/orders` | Lista los ultimos 100 pedidos. |
-| `POST` | `/orders` | Crea un pedido. |
-| `GET` | `/orders/{id}` | Obtiene un pedido y sus items. |
+| `GET` | `/orders` | Lista los ultimos 100 pedidos; requiere rol `admin`. |
+| `POST` | `/orders` | Crea un pedido; requiere rol `cliente` o `admin`. |
+| `GET` | `/orders/{id}` | Obtiene un pedido y sus items; requiere acceso al pedido. |
 | `PUT` | `/orders/{id}` | Actualiza el estado; requiere rol `restaurante` o `admin`. |
 | `DELETE` | `/orders/{id}` | Elimina un pedido; requiere rol `admin`. |
-| `GET` | `/orders/user/{userId}` | Lista los pedidos de un usuario. |
+| `GET` | `/orders/user/{userId}` | Lista los pedidos de un usuario; requiere ser el usuario o `admin`. |
 | `GET` | `/orders/restaurant/{restaurantId}` | Lista pedidos; requiere rol `restaurante` o `admin`. |
 | `GET` | `/docs` | Swagger UI. |
 | `GET` | `/openapi.json` | Especificacion OpenAPI. |
@@ -99,7 +99,7 @@ Base URL: `http://<HOST>:3004`.
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
 | `GET` | `/health` | Verifica que el servicio este activo. |
-| `GET` | `/api/dashboard?userId={userId}` | Agrega datos del usuario, restaurante favorito e historial de pedidos. |
+| `GET` | `/api/dashboard?userId={userId}` | Agrega datos del usuario, restaurante favorito e historial; requiere JWT. El cliente solo puede consultar su propio ID. |
 | `GET` | `/docs` | Interfaz Swagger UI. |
 | `GET` | `/openapi.json` | Especificacion OpenAPI del servicio. |
 
@@ -116,6 +116,24 @@ Base URL: `http://<HOST>:3005`.
 | `GET` | `/openapi.json` | Especificacion OpenAPI generada por FastAPI. |
 
 Las rutas que consume `ms-historial` ya estan implementadas como aliases compatibles en Usuarios, Catalogo y Pedidos.
+
+## Roles y autenticacion
+
+El sistema utiliza tres roles:
+
+| Rol | Permisos principales |
+|---|---|
+| `cliente` | Registrarse, iniciar sesion, crear pedidos y consultar su propio historial. |
+| `restaurante` | Consultar pedidos de su `restaurant_id` y actualizar sus estados. |
+| `admin` | Consultar usuarios, consultar cualquier pedido, actualizar estados y eliminar pedidos. |
+
+El registro publico siempre crea usuarios con rol `cliente`. Los roles `restaurante` y `admin` se asignan mediante scripts administrativos en `ms-usuarios`. El login devuelve un JWT con `user_id`, `role` y, para restaurantes, `restaurant_id`.
+
+Las rutas protegidas reciben:
+
+```text
+Authorization: Bearer <access_token>
+```
 
 ## Prueba local de integración
 
@@ -134,21 +152,39 @@ docker compose -f docker-compose.local.yml run --rm catalogo ./catalog-seed
 docker compose -f docker-compose.local.yml run --rm pedidos node seed.js
 ```
 
-Prueba salud, Swagger y el agregador:
+Prueba salud y Swagger:
 
 ```bash
-  curl http://localhost:8001/health
+curl http://localhost:8001/health
 curl http://localhost:3002/health
-  curl http://localhost:8000/
+curl http://localhost:8000/
 curl http://localhost:3004/health
 curl http://localhost:3005/health
-  curl http://localhost:8001/docs
+curl http://localhost:8001/docs
 curl http://localhost:3002/docs
-  curl http://localhost:8000/docs
+curl http://localhost:8000/docs
 curl http://localhost:3004/docs
 curl http://localhost:3005/docs
-curl "http://localhost:3004/api/dashboard?userId=1"
 ```
+
+Para probar el dashboard, primero registra e inicia sesion para obtener un JWT:
+
+```bash
+curl -X POST http://localhost:8001/register \
+  -H 'Content-Type: application/json' \
+  -d '{"nombre":"Ana","apellido":"Perez","email":"ana@example.com","telefono":"999999999","password":"cambia-esta-clave","direccion":"Av. Principal 123"}'
+
+curl -X POST http://localhost:8001/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"ana@example.com","password":"cambia-esta-clave"}'
+
+curl "http://localhost:3004/api/dashboard?userId=<USER_ID>" \
+  -H 'Authorization: Bearer <ACCESS_TOKEN>'
+```
+
+### Resultado comprobado localmente
+
+El Compose local fue levantado correctamente con las tres bases y los cinco microservicios. Las bases reportaron estado `healthy`; los cinco health checks respondieron correctamente; y se verificaron registro, login, JWT con rol `cliente` y acceso autenticado al dashboard.
 
 Para detener la prueba conservando los datos:
 
@@ -337,12 +373,12 @@ El servicio usa `MONGO_URI` y escucha en el puerto `3002`.
 
 El proyecto actual no incluye un `docker-compose.yml` raiz que levante los cinco servicios. Despliegalos individualmente con los comandos de la siguiente seccion.
 
-Tambien hay contratos que deben revisarse antes de una integracion completa:
+Los contratos entre microservicios ya estan alineados para la prueba local:
 
 1. `ms-pedidos` ya usa `/api/restaurantes/platos/:dishId` y los campos `nombre` y `precio` de `ms-catalogo`.
-2. `ms-historial` usa rutas `/api/usuarios/...` y `/api/pedidos/...`; revisa que esas rutas existan en las versiones actuales de Usuarios y Pedidos.
-3. El endpoint de Usuarios actual usa `/usuarios/:id`, mientras Historial tiene por defecto `/api/usuarios/:id`.
-4. `ms-consultas` devuelve datos de respaldo si Athena falla. Verifica que el bucket S3, la base de Athena, las tablas y los permisos IAM existan antes de considerar el servicio operativo.
+2. `ms-historial` usa los aliases `/api/usuarios/...` y `/api/pedidos/...` de Usuarios y Pedidos.
+3. Historial reenvia el JWT al consultar los microservicios y restringe el dashboard por `userId` y rol.
+4. `ms-consultas` devuelve datos de respaldo si Athena falla. En AWS verifica que el bucket S3, la base de Athena, las tablas y los permisos IAM existan antes de considerar el servicio operativo.
 
 No uses datos mock como mecanismo de produccion. Son utiles para desarrollo, pero pueden ocultar fallos de conectividad o contratos entre microservicios.
 
